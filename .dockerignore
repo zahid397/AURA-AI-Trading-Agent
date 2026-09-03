@@ -1,0 +1,28 @@
+# Keeps the build context small and prevents host-specific artifacts
+# (a Windows-native venv, node_modules with platform-specific native
+# bindings, a portable PHP extraction) from ever being copied into a
+# Linux image -- every Dockerfile installs its own dependencies fresh.
+.git/
+.tools/
+legacy-prototype/
+
+ai-engine/.venv/
+ai-engine/__pycache__/
+ai-engine/**/__pycache__/
+ai-engine/.pytest_cache/
+ai-engine/*.sqlite
+ai-engine/*.sqlite-journal
+ai-engine/*.sqlite-wal
+ai-engine/*.sqlite-shm
+
+backend/vendor/
+backend/node_modules/
+backend/storage/logs/*.log
+backend/database/database.sqlite
+backend/.phpunit.cache/
+
+frontend/node_modules/
+frontend/dist/
+
+**/.env
+!**/.env.example

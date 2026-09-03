@@ -1,0 +1,16 @@
+# This build uses only what was already present in the sandbox it was built in
+# (pip install of anything new returned "No matching distribution found" --
+# see docs/IMPLEMENTATION_STATUS.md). Flask was pre-installed; everything else
+# used here (sqlite3, math, uuid, dataclasses, etc.) is Python standard library.
+#
+# If pip is working normally in your environment, this is the only real
+# dependency:
+Flask>=3.0
+
+# NOT used, despite being in the master prompt's required stack, because they
+# could not be installed in the build sandbox:
+#   fastapi, uvicorn, pydantic, langgraph, alpaca-py
+# If you have working pip/network access, these would be reasonable next
+# additions -- see docs/IMPLEMENTATION_STATUS.md for the suggested migration
+# path (this Flask app's routes map fairly directly onto FastAPI path
+# operations if you want to move to the originally-specified stack).

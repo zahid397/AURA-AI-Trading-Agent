@@ -1,0 +1,69 @@
+[project]
+name = "aura-ai-engine"
+version = "0.1.0"
+description = "AURA AI Trading Agent -- FastAPI + LangGraph multi-agent options trading engine (paper trading only)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.15.0",
+    "langgraph==1.2.11",
+    "langgraph-checkpoint-sqlite==3.1.1",
+    "alpaca-py==0.44.0",
+    "mcp==2.1.1",
+    "httpx==0.28.1",
+    "python-dotenv==1.2.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 200
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "BLE", "S"]
+ignore = [
+    # Deliberate in a small, documented set of spots: probing an external
+    # service's capability (BLE001 in app/alpaca/*.py, app/services/laravel_events.py)
+    # or best-effort state serialization across a process/version boundary
+    # (app/api/routes/runs.py) must degrade gracefully on *any* failure, not
+    # just the exception types we happen to anticipate today.
+    "BLE001",
+    "S112",
+    "S110",
+    # `random.Random(seed)` is used deliberately for reproducible synthetic
+    # demo/backtest fixtures, never for anything security-sensitive.
+    "S311",
+    # `class Foo(str, Enum)` (not `StrEnum`) is the standard Pydantic v2
+    # pattern for JSON-serializable string enums used throughout state.py.
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# `assert` is how pytest tests make assertions -- S101 flagging it is a
+# false positive for test files specifically (it exists to catch stray
+# asserts in *production* code, which get stripped by `python -O`).
+# S105/S106 also false-positive on fake credential strings used as test fixtures.
+"tests/*" = ["S101", "S105", "S106"]
+# Long natural-language thesis template strings, not dense code.
+"app/strategies/selector.py" = ["E501"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Explicit rather than relying on flat-layout auto-discovery: this repo's
+# root also contains `tests/` alongside `app/`, and auto-discovery would
+# otherwise try (and warn, or in stricter setuptools versions fail) to
+# decide whether `tests` is a second top-level package to ship.
+include = ["app*"]

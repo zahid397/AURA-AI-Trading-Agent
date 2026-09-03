@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AURA AI Trading Agent — Positions</title>
+<link rel="stylesheet" href="static/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar-mount"></div>
+  <div>
+    <div class="topbar" id="topbar-mount"></div>
+    <div class="disclaimer-bar" id="disclaimer-mount"></div>
+    <div class="content">
+      <h1 class="page-title">Open Positions</h1>
+      <p class="page-sub">All open options positions in the paper account, with full leg detail.</p>
+
+      <div id="positions-cards"></div>
+    </div>
+  </div>
+</div>
+
+<script src="static/app.js"></script>
+<script>
+function loadPositions() {
+  return API.get("/api/positions").then(function (positions) {
+  const el = document.getElementById("positions-cards");
+  if (!positions.length) { el.innerHTML = `<div class="card empty-state">No open positions</div>`; return; }
+  el.innerHTML = positions.map(p => `
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="sym-badge">${p.symbol.slice(0,3)}</div>
+          <div><div style="font-weight:700;">${p.symbol} &mdash; ${p.strategy_label}</div>
+          <div style="font-size:11.5px; color:var(--text-muted);">Opened ${timeAgo(p.opened_at)}</div></div>
+        </div>
+        <div style="text-align:right;">
+          <div class="${p.unrealized_pl>=0?'up':'down'}" style="font-weight:700; font-size:16px;">${money(p.unrealized_pl,{forceSign:true})}</div>
+          <div style="font-size:11px; color:var(--text-muted);">Unrealized P&amp;L</div>
+        </div>
+      </div>
+      <div class="grid grid-2" style="gap:20px;">
+        <div>
+          <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:6px;">LEGS</div>
+          ${p.legs.map(l => `<div class="leg-row"><span><span class="pill ${l.action==='BUY'?'buy':'sell'}">${l.action}</span> ${l.type} $${l.strike}</span><span>${money(l.price)}</span></div>`).join("")}
+        </div>
+        <div>
+          <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:6px;">RISK</div>
+          <div class="leg-row"><span>Max loss</span><span class="down">${money(p.max_loss)}</span></div>
+          <div class="leg-row"><span>Max gain</span><span class="up">${money(p.max_gain)}</span></div>
+          <div class="leg-row"><span>Status</span><span class="pill open">${p.status}</span></div>
+        </div>
+      </div>
+    </div>
+  `).join("");
+  });
+}
+
+renderShell("positions.html");
+loadPositions();
+</script>
+</body>
+</html>

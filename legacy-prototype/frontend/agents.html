@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AURA AI Trading Agent — AI Agents</title>
+<link rel="stylesheet" href="static/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar-mount"></div>
+  <div>
+    <div class="topbar" id="topbar-mount"></div>
+    <div class="disclaimer-bar" id="disclaimer-mount"></div>
+    <div class="content">
+      <h1 class="page-title">AI Agents</h1>
+      <p class="page-sub">Five-stage pipeline: Market Analyst &rarr; Options Strategy &rarr; Risk Manager &rarr; Execution &rarr; Learning.</p>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <h3>Run a fresh analysis</h3>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select id="symbol-select" class="btn outline" style="cursor:pointer;">
+            <option value="SPY">SPY</option><option value="NVDA">NVDA</option>
+            <option value="TSLA">TSLA</option><option value="AAPL">AAPL</option>
+            <option value="MSFT">MSFT</option>
+          </select>
+          <button class="btn" id="run-btn">Run Pipeline</button>
+          <span id="run-status" style="font-size:12.5px; color:var(--text-muted);"></span>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-header"><h3>Agent Status</h3></div>
+          <div id="agents-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Last Run Detail</h3></div>
+          <div id="run-detail"><div class="empty-state">Run the pipeline above to see a full trace.</div></div>
+        </div>
+      </div>
+
+      <div style="height:16px;"></div>
+      <div class="card">
+        <div class="card-header"><h3>Run History</h3></div>
+        <table><thead><tr><th>Time</th><th>Symbol</th><th>Strategy</th><th>Confidence</th><th>Risk</th></tr></thead>
+        <tbody id="history-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="static/app.js"></script>
+<script>
+function loadAgents() {
+  return API.get("/api/agents").then(function (agents) {
+  document.getElementById("agents-list").innerHTML = agents.map(a => `
+    <div class="agent-row">
+      <div class="a-icon">&#9679;</div>
+      <div style="flex:1;"><div class="a-title">${a.name}</div><div class="a-desc">${a.description}</div></div>
+      <span class="pill ${a.status.toLowerCase()}">${a.status}</span>
+    </div>
+  `).join("");
+  });
+}
+
+function renderRunDetail(result) {
+  const mv = result.market_view, s = result.strategy, r = result.risk, ex = result.execution;
+  document.getElementById("run-detail").innerHTML = `
+    <div style="font-size:12.5px; line-height:1.7;">
+      <div><b>1. Market Analyst</b> &mdash; ${result.symbol}: trend=<b>${mv.trend}</b>, RSI=${mv.rsi}, SMA20=${mv.sma20}, SMA50=${mv.sma50}, volatility=${(mv.volatility*100).toFixed(1)}% (${mv.vol_regime})</div>
+      <div style="margin-top:6px;"><b>2. Options Strategy</b> &mdash; ${s.strategy_label}, confidence ${s.confidence}%, max loss ${money(s.max_loss)}, max gain ${money(s.max_gain)}</div>
+      <div style="margin-top:6px;"><b>3. Risk Manager</b> &mdash; <span class="pill ${r.approved?'active':'sell'}">${r.approved ? 'APPROVED' : 'REJECTED'}</span> ${r.reasons.join(" ")}</div>
+      <div style="margin-top:6px;"><b>4. Execution</b> &mdash; ${ex.submitted ? `Order ${ex.order.order_id.slice(0,8)} filled @ ${money(ex.order.fill_price)} (mock)` : `Not submitted (${ex.reason})`}</div>
+      <div style="margin-top:6px;"><b>5. Learning</b> &mdash; ${result.learning.recommendation}</div>
+    </div>
+    <div class="thesis-box"><b>Thesis:</b> ${s.thesis}</div>
+    <div style="margin-top:8px;">
+      ${s.legs.map(l => `<div class="leg-row"><span>${l.action} ${l.type} $${l.strike}</span><span>${money(l.price)}</span></div>`).join("")}
+    </div>
+  `;
+}
+
+function loadHistory() {
+  return API.get("/api/decisions/history").then(function (history) {
+  document.getElementById("history-tbody").innerHTML = history.map(h => {
+    const r = h.result;
+    return `<tr><td>${fmtClock(h.created_at)}</td><td><b>${r.symbol}</b></td><td>${r.strategy.strategy_label}</td>
+      <td>${r.strategy.confidence}%</td><td><span class="pill ${r.risk.approved?'active':'sell'}">${r.risk.approved?'Approved':'Rejected'}</span></td></tr>`;
+  }).join("") || `<tr><td colspan="5" class="empty-state">No runs yet</td></tr>`;
+  });
+}
+
+document.getElementById("run-btn").addEventListener("click", function (e) {
+  const symbol = document.getElementById("symbol-select").value;
+  e.target.disabled = true;
+  document.getElementById("run-status").textContent = "Running Market Analyst \u2192 Strategy \u2192 Risk \u2192 Execution \u2192 Learning...";
+  API.post("/api/run", { symbol }).then(function (result) {
+    renderRunDetail(result);
+    return loadHistory().then(function () { return result; });
+  }).then(function (result) {
+    document.getElementById("run-status").textContent = `Done in ${result.duration_ms}ms (run ${result.run_id})`;
+  }).catch(function (err) {
+    document.getElementById("run-status").textContent = "Run failed: " + err.message;
+  }).then(function () {
+    e.target.disabled = false;
+  });
+});
+
+renderShell("agents.html");
+loadAgents();
+loadHistory();
+</script>
+</body>
+</html>

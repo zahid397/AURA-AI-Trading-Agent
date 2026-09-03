@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AURA AI Trading Agent — Dashboard</title>
+<link rel="stylesheet" href="static/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar-mount"></div>
+  <div>
+    <div class="topbar" id="topbar-mount"></div>
+    <div class="disclaimer-bar" id="disclaimer-mount"></div>
+    <div class="content">
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-sub">Live (simulated) portfolio overview and latest agent decision.</p>
+
+      <div class="grid grid-5" id="stat-cards"></div>
+
+      <div style="height:16px;"></div>
+      <div class="grid grid-3">
+        <div class="card">
+          <div class="card-header">
+            <h3>Portfolio Equity Curve</h3>
+            <span id="equity-summary" style="font-size:12.5px;color:var(--text-muted);"></span>
+          </div>
+          <svg id="equity-chart" width="100%" height="220" viewBox="0 0 720 220" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Latest AI Decision</h3></div>
+          <div id="latest-decision"><div class="empty-state">No agent run yet. Click "Run Agents Now" below.</div></div>
+          <button class="btn" style="width:100%; margin-top:12px;" id="run-btn">Run Agents Now</button>
+        </div>
+      </div>
+
+      <div style="height:16px;"></div>
+      <div class="grid grid-3col">
+        <div class="card">
+          <div class="card-header"><h3>Open Positions</h3><a class="link" href="positions.html">View All</a></div>
+          <table id="positions-table"><thead><tr><th>Symbol</th><th>Strategy</th><th>P&amp;L</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>AI Agents Status</h3><a class="link" href="agents.html">View All</a></div>
+          <div id="agents-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Recent Trades</h3></div>
+          <table id="trades-table"><thead><tr><th>Symbol</th><th>Strategy</th><th>P&amp;L</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div style="height:16px;"></div>
+      <div class="card">
+        <div class="card-header"><h3>Agent Run Log</h3></div>
+        <div id="agent-log"><div class="empty-state">No runs yet.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="static/app.js"></script>
+<script>
+function drawEquityChart(points) {
+  const svg = document.getElementById("equity-chart");
+  if (!points.length) { svg.innerHTML = ""; return; }
+  const w = 720, h = 220, pad = 10;
+  const min = Math.min(...points), max = Math.max(...points);
+  const range = (max - min) || 1;
+  const stepX = (w - pad * 2) / (points.length - 1);
+  const coords = points.map((p, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - ((p - min) / range) * (h - pad * 2);
+    return [x, y];
+  });
+  const line = coords.map((c) => c.join(",")).join(" L ");
+  const area = `M ${coords[0][0]},${h - pad} L ` + coords.map(c => c.join(",")).join(" L ") + ` L ${coords[coords.length - 1][0]},${h - pad} Z`;
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="fillGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#2f5bff" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="#2f5bff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${area}" fill="url(#fillGrad)" stroke="none"/>
+    <path d="M ${line}" fill="none" stroke="#2f5bff" stroke-width="2.2"/>
+  `;
+}
+
+function loadDashboard() {
+  return Promise.all([
+    API.get("/api/account"), API.get("/api/positions"), API.get("/api/agents"),
+    API.get("/api/trades"), API.get("/api/decisions/history"),
+  ]).then(function (results) {
+  const account = results[0], positions = results[1], agents = results[2],
+        trades = results[3], decisionHistory = results[4];
+  const dailyPl = account.daily_pl || 0;
+  const dailyPlPct = (dailyPl / account.starting_equity) * 100;
+
+  document.getElementById("stat-cards").innerHTML = `
+    <div class="card stat-card"><div class="icon blue">$</div><div class="label">Account Balance</div>
+      <div class="value">${money(account.equity)}</div><div class="delta" style="color:var(--text-faint);">Starting: ${money(account.starting_equity)}</div></div>
+    <div class="card stat-card"><div class="icon ${dailyPl>=0?'green':'amber'}">&#8599;</div><div class="label">Total P&amp;L (Today)</div>
+      <div class="value ${dailyPl>=0?'up':'down'}">${money(dailyPl, {forceSign:true})}</div><div class="delta ${dailyPl>=0?'up':'down'}">${pct(dailyPlPct)}</div></div>
+    <div class="card stat-card"><div class="icon purple">&#9679;</div><div class="label">Unrealized P&amp;L</div>
+      <div class="value ${account.unrealized_pl>=0?'up':'down'}">${money(account.unrealized_pl, {forceSign:true})}</div><div class="delta" style="color:var(--text-faint);">Open Positions</div></div>
+    <div class="card stat-card"><div class="icon blue">&#127974;</div><div class="label">Buying Power</div>
+      <div class="value">${money(account.buying_power)}</div></div>
+    <div class="card stat-card"><div class="icon green">&#9989;</div><div class="label">Risk Level</div>
+      <div class="value" style="color:var(--green);">${account.risk_level}</div><div class="delta" style="color:var(--text-faint);">Status</div></div>
+  `;
+
+  // synthesize an intraday-looking equity curve ending exactly at current equity
+  const base = account.starting_equity;
+  const seedPoints = Array.from({length: 24}, (_, i) => base + Math.sin(i/3)*120 + i*4);
+  seedPoints[seedPoints.length-1] = account.equity;
+  drawEquityChart(seedPoints);
+  document.getElementById("equity-summary").textContent = `${money(account.equity)}  ${pct(dailyPlPct)} today`;
+
+  document.getElementById("positions-table").querySelector("tbody").innerHTML = positions.slice(0,4).map(p => `
+    <tr><td><b>${p.symbol}</b><div style="font-size:11px;color:var(--text-muted)">${p.strategy_label}</div></td>
+        <td>${p.strategy_label}</td>
+        <td class="${p.unrealized_pl>=0?'up':'down'}">${money(p.unrealized_pl, {forceSign:true})}</td></tr>
+  `).join("") || `<tr><td colspan="3" class="empty-state">No open positions</td></tr>`;
+
+  document.getElementById("agents-list").innerHTML = agents.map(a => `
+    <div class="agent-row">
+      <div class="a-icon">&#9679;</div>
+      <div style="flex:1;"><div class="a-title">${a.name}</div><div class="a-desc">${a.description}</div></div>
+      <span class="pill ${a.status.toLowerCase()}">${a.status}</span>
+    </div>
+  `).join("");
+
+  document.getElementById("trades-table").querySelector("tbody").innerHTML = trades.slice(0,4).map(t => `
+    <tr><td><b>${t.symbol}</b></td><td>${t.strategy_label}</td>
+        <td class="${t.status==='OPEN' ? '' : (t.pnl>=0?'up':'down')}">${t.status==='OPEN' ? '<span class="pill open">OPEN</span>' : money(t.pnl,{forceSign:true})}</td></tr>
+  `).join("") || `<tr><td colspan="3" class="empty-state">No trades yet</td></tr>`;
+
+  renderAgentLog(decisionHistory);
+  });
+}
+
+function renderAgentLog(history) {
+  const el = document.getElementById("agent-log");
+  if (!history.length) { el.innerHTML = `<div class="empty-state">No agent runs yet. Click "Run Agents Now" above.</div>`; return; }
+  el.innerHTML = history.slice(0,8).map(h => {
+    const r = h.result;
+    return `
+    <div class="log-row"><div class="t">${fmtClock(h.created_at)}</div>
+      <div class="agent-name">Market Analyst</div><div>${r.symbol}: ${r.market_view.trend} trend, RSI ${r.market_view.rsi}, ${r.market_view.vol_regime} volatility</div>
+    </div>
+    <div class="log-row"><div class="t"></div>
+      <div class="agent-name">Options Strategy</div><div>${r.strategy.strategy_label} recommended. Confidence: ${r.strategy.confidence}%</div>
+    </div>
+    <div class="log-row"><div class="t"></div>
+      <div class="agent-name">Risk Manager</div><div>${r.risk.approved ? 'Approved' : 'Rejected'} &mdash; ${r.risk.reasons[0]}</div>
+    </div>
+    `;
+  }).join("");
+}
+
+function renderLatestDecision(result) {
+  if (!result) return;
+  const s = result.strategy, r = result.risk;
+  document.getElementById("latest-decision").innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div style="font-weight:700; font-size:15px;">${result.symbol} ${s.strategy_label}</div>
+      <span class="pill ${result.market_view.trend}">${result.market_view.trend.toUpperCase()}</span>
+    </div>
+    <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">Confidence <b style="color:var(--text)">${s.confidence}%</b> &middot; ${s.dte} DTE &middot; ${fmtClock(result.started_at)}</div>
+    <div style="margin-top:10px;">
+      ${s.legs.map(l => `<div class="leg-row"><span>${l.action} ${l.type} $${l.strike}</span><span>${money(l.price)}</span></div>`).join("")}
+    </div>
+    <div class="thesis-box"><b>Reasoning:</b> ${s.thesis}</div>
+    <div style="margin-top:8px; font-size:12px;">
+      <span class="pill ${r.approved ? 'active' : 'sell'}">${r.approved ? 'RISK APPROVED' : 'RISK REJECTED'}</span>
+      <span style="color:var(--text-muted); margin-left:6px;">${r.reasons[0]}</span>
+    </div>
+  `;
+}
+
+document.getElementById("run-btn").addEventListener("click", function (e) {
+  e.target.disabled = true; e.target.textContent = "Running agents...";
+  API.post("/api/run", {}).then(function (result) {
+    renderLatestDecision(result);
+    return loadDashboard();
+  }).catch(function (err) {
+    alert("Run failed: " + err.message);
+  }).then(function () {
+    e.target.disabled = false; e.target.textContent = "Run Agents Now";
+  });
+});
+
+renderShell("index.html");
+loadDashboard().then(function () {
+  return API.get("/api/decisions/latest");
+}).then(function (latest) {
+  if (latest) renderLatestDecision(latest);
+});
+</script>
+</body>
+</html>

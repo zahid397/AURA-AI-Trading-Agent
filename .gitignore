@@ -1,0 +1,20 @@
+# Portable, machine-local PHP + Composer used in sandboxes with no system
+# PHP and no admin rights to install one (see docs/IMPLEMENTATION_STATUS.md).
+# Never commit this -- it's a large, machine-specific binary download, not
+# project source. Docker Compose does not need it (the laravel.Dockerfile
+# installs its own PHP inside the image).
+.tools/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+node_modules/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.env
+!.env.example
+vendor/
+.venv/

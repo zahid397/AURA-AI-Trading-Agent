@@ -1,0 +1,41 @@
+# WRITTEN AS A REFERENCE STARTING POINT -- NEVER RUN. No `docker` binary
+# exists in the sandbox this was built in, so `docker compose up` has not
+# been tried against this file. See docs/IMPLEMENTATION_STATUS.md.
+#
+# Also note: this build uses SQLite (backend/aura_demo.db), not Postgres/Redis
+# -- the postgres/redis services below are what the ORIGINAL master prompt
+# specifies, not what the current backend code actually connects to. Wiring
+# data_store.py to Postgres would be the natural next step if you pick this
+# up (see README.md), but that rewrite has not been done.
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - TRADING_ENV=paper
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Not currently used by data_store.py (which uses SQLite). Included only
+  # because the original spec calls for Postgres; wiring it up is unfinished
+  # work, not a working option today.
+  # postgres:
+  #   image: postgres:16
+  #   environment:
+  #     - POSTGRES_DB=aura
+  #     - POSTGRES_PASSWORD=devonly
+  #   ports:
+  #     - "5432:5432"
+
+  # Not used anywhere in this codebase yet.
+  # redis:
+  #   image: redis:7
+  #   ports:
+  #     - "6379:6379"

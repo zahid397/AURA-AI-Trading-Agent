@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AURA AI Trading Agent — Performance</title>
+<link rel="stylesheet" href="static/style.css" />
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar-mount"></div>
+  <div>
+    <div class="topbar" id="topbar-mount"></div>
+    <div class="disclaimer-bar" id="disclaimer-mount"></div>
+    <div class="content">
+      <h1 class="page-title">Performance</h1>
+      <p class="page-sub">Computed from closed trades in the demo database (win rate, profit factor) &mdash; real arithmetic over a small simulated sample, not a backtested track record.</p>
+
+      <div class="grid grid-5" id="perf-cards"></div>
+
+      <div style="height:16px;"></div>
+      <div class="card">
+        <div class="card-header"><h3>Learning Agent Recommendation</h3></div>
+        <div id="learning-rec" class="thesis-box">Loading...</div>
+      </div>
+
+      <div style="height:16px;"></div>
+      <div class="card">
+        <div class="card-header"><h3>Trade History</h3></div>
+        <table><thead><tr><th>Symbol</th><th>Strategy</th><th>Opened</th><th>Status</th><th>P&amp;L</th></tr></thead>
+        <tbody id="trades-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="static/app.js"></script>
+<script>
+function load() {
+  return Promise.all([
+    API.get("/api/performance"), API.get("/api/trades"), API.get("/api/decisions/history"),
+  ]).then(function (results) {
+  const perf = results[0], trades = results[1], runHistory = results[2];
+
+  document.getElementById("perf-cards").innerHTML = `
+    <div class="card stat-card"><div class="label">Realized P&amp;L</div><div class="value ${perf.total_realized_pl>=0?'up':'down'}">${money(perf.total_realized_pl,{forceSign:true})}</div></div>
+    <div class="card stat-card"><div class="label">Unrealized P&amp;L</div><div class="value ${perf.total_unrealized_pl>=0?'up':'down'}">${money(perf.total_unrealized_pl,{forceSign:true})}</div></div>
+    <div class="card stat-card"><div class="label">Win Rate</div><div class="value">${perf.win_rate !== null ? perf.win_rate+'%' : '--'}</div></div>
+    <div class="card stat-card"><div class="label">Profit Factor</div><div class="value">${perf.profit_factor == null ? '--' : perf.profit_factor}</div></div>
+    <div class="card stat-card"><div class="label">Closed / Open</div><div class="value">${perf.closed_trade_count} / ${perf.open_position_count}</div></div>
+  `;
+
+  const lastRun = runHistory[0];
+  document.getElementById("learning-rec").innerHTML = lastRun
+    ? `<b>Sample size: ${lastRun.result.learning.sample_size} closed trades.</b> ${lastRun.result.learning.recommendation}`
+    : "Run the agent pipeline at least once (AI Agents page) to get a recommendation.";
+
+  document.getElementById("trades-tbody").innerHTML = trades.map(t => `
+    <tr><td><b>${t.symbol}</b></td><td>${t.strategy_label}</td><td>${timeAgo(t.opened_at)}</td>
+        <td><span class="pill ${t.status.toLowerCase()}">${t.status}</span></td>
+        <td class="${t.status==='OPEN' ? '' : (t.pnl>=0?'up':'down')}">${t.status==='OPEN' ? '--' : money(t.pnl,{forceSign:true})}</td></tr>
+  `).join("") || `<tr><td colspan="5" class="empty-state">No trades</td></tr>`;
+  });
+}
+
+renderShell("performance.html");
+load();
+</script>
+</body>
+</html>
