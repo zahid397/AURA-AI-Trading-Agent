@@ -1,5 +1,5 @@
 import type { MeResponse, User, UserSettings } from '@/types/api'
-import { DEMO_CREDENTIALS, ME_RESPONSE } from '@/dev/fixtures/auth'
+import { ME_RESPONSE } from '@/dev/fixtures/auth'
 import { API_MODE, simulateDelay } from './apiMode'
 import { ApiError, ensureCsrfCookie, get, http, post } from './http'
 
@@ -21,10 +21,14 @@ function toMeResponse(raw: MeApiResponse): MeResponse {
 export async function login(email: string, password: string): Promise<MeResponse> {
   if (API_MODE === 'fixture') {
     await simulateDelay()
-    if (email.trim().toLowerCase() !== DEMO_CREDENTIALS.email.toLowerCase() || password !== DEMO_CREDENTIALS.password) {
+    // Demo/showcase build: any non-blank email+password logs in successfully
+    // (no real backend to check credentials against -- see VITE_API_MODE).
+    // The exact seeded DEMO_CREDENTIALS still work too, they're just no
+    // longer required.
+    if (!email.trim() || !password) {
       throw new ApiError('Invalid email or password.', { code: 'invalid_credentials', status: 401, requestId: null })
     }
-    return ME_RESPONSE
+    return { ...ME_RESPONSE, user: { ...ME_RESPONSE.user, email: email.trim() } }
   }
   await ensureCsrfCookie()
   await http.post('/auth/login', { email, password })

@@ -33,20 +33,25 @@ describe('useAuthStore', () => {
     expect(auth.isLoading).toBe(false)
   })
 
-  it('rejects an incorrect password and surfaces an error without authenticating', async () => {
+  it('logs in with any non-blank email and password (demo/showcase bypass, no real backend to check against)', async () => {
     const auth = useAuthStore()
-    const ok = await auth.login(DEMO_CREDENTIALS.email, 'wrong-password')
+    const ok = await auth.login('someone@example.com', 'literally-anything')
+
+    expect(ok).toBe(true)
+    expect(auth.isAuthenticated).toBe(true)
+    expect(auth.user?.email).toBe('someone@example.com')
+    expect(auth.settings).not.toBeNull()
+    expect(auth.error).toBeNull()
+  })
+
+  it('rejects a blank email or password without authenticating', async () => {
+    const auth = useAuthStore()
+    const ok = await auth.login('', 'something')
 
     expect(ok).toBe(false)
     expect(auth.isAuthenticated).toBe(false)
     expect(auth.user).toBeNull()
     expect(auth.error).toBeTruthy()
-  })
-
-  it('is case-insensitive on email but not on password', async () => {
-    const auth = useAuthStore()
-    const ok = await auth.login(DEMO_CREDENTIALS.email.toUpperCase(), DEMO_CREDENTIALS.password)
-    expect(ok).toBe(true)
   })
 
   it('registers a new account and exposes the user + settings, starting in approval_required mode', async () => {
